@@ -1,0 +1,2 @@
+# Always LF - a CRLF shebang line breaks the scripts on Linux
+* text=auto eol=lf

@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+"""charon-bash - custom shell for SSH access to the charon server."""
+
+import atexit
+import cmd
+import getpass
+import glob
+import os
+import readline
+import shlex
+import signal
+import socket
+import subprocess
+import sys
+
+VERSION = "0.4.0"
+HISTFILE = os.path.expanduser("~/.charon_bash_history")
+HISTSIZE = 1000
+
+# The real location of this script (resolves the /usr/local/bin symlink),
+# so the versioned config is found next to it in the repository.
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+
+# Command lists, read in this order:
+#   1. versioned defaults shipped in the repository
+#   2. server-specific additions/removals (not versioned)
+COMMAND_FILES = [
+    os.path.join(SCRIPT_DIR, "config", "commands"),
+    "/etc/charon-bash/commands.local",
+]
+
+# Used only when no command file could be read at all
+FALLBACK_COMMANDS = {"ls", "cat", "less", "vi", "nano", "docker"}
+
+
+def prompt_color(code, text):
+    # \001 and \002 mark non-printing characters for readline,
+    # otherwise line editing and wrapping of long lines break
+    return f"\001\033[{code}m\002{text}\001\033[0m\002"
+
+
+def color(code, text):
+    return f"\033[{code}m{text}\033[0m"
+
+
+def warn(msg):
+    print(color("33", f"charon-bash: {msg}"), file=sys.stderr)
+
+
+def load_commands(paths=COMMAND_FILES):
+    """Read allowed system commands from config files.
+
+    Format: one command per line, '#' starts a comment,
+    a leading '-' removes a command added by an earlier file.
+    """
+    commands = set()
+    found = False
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as f:
+                found = True
+                for raw in f:
+                    line = raw.split("#", 1)[0].strip()
+                    if not line:
+                        continue
+                    if line.startswith("-"):
+                        commands.discard(line[1:].strip())
+                    else:
+                        commands.add(line.split()[0])
+        except FileNotFoundError:
+            continue
+        except OSError as e:
+            warn(f"cannot read {path}: {e.strerror}")
+    if not found:
+        warn("no command config found, using a minimal built-in list")
+        return set(FALLBACK_COMMANDS)
+    return commands
+
+
+class CharonShell(cmd.Cmd):
+    doc_header = "Built-in commands (type help <command> for details):"
+    undoc_header = "Other commands:"
+    ruler = "-"
+
+    def __init__(self):
+        super().__init__()
+        self.user = getpass.getuser()
+        self.host = socket.gethostname()
+        self.home = os.path.expanduser("~")
+        self.oldpwd = None
+        self.commands = load_commands()
+        self._update_prompt()
+        self.intro = (
+            color("1;36", f"charon-bash {VERSION}") + f" on {self.host}\n"
+            "Type 'help' for a list of commands, 'bash' for a regular shell, "
+            "'exit' to log out.\n"
+        )
+
+    # ---------- loop behaviour ----------
+
+    def _update_prompt(self):
+        cwd = os.getcwd()
+        if cwd == self.home or cwd.startswith(self.home + "/"):
+            cwd = "~" + cwd[len(self.home):]
+        self.prompt = (
+            prompt_color("1;36", "charon-bash") + " "
+            + prompt_color("33", self.user) + ":"
+            + prompt_color("34", cwd) + "> "
+        )
+
+    def postcmd(self, stop, line):
+        self._update_prompt()
+        return stop
+
+    def emptyline(self):
+        pass  # default cmd.Cmd would repeat the last command
+
+    def default(self, line):
+        """Called for anything that isn't a built-in command."""
+        name = line.split()[0]
+        if name in self.commands:
+            self._shell(line)
+        else:
+            print(f"charon-bash: unknown command: {name}  "
+                  f"(try 'help', or '!{name} ...' to run it through bash)")
+
+    def do_EOF(self, arg):
+        """Ctrl+D - same as exit."""
+        print()
+        return self.do_exit(arg)
+
+    # ---------- tab completion ----------
+
+    def completenames(self, text, *ignored):
+        """Complete command names: built-ins + allowed system commands."""
+        names = set(super().completenames(text, *ignored))
+        names.update(c for c in self.commands if c.startswith(text))
+        return sorted(names)
+
+    def completedefault(self, text, line, begidx, endidx):
+        """Complete arguments of system commands and '!' lines as paths."""
+        return self._complete_path(text)
+
+    # ---------- help ----------
+
+    def do_help(self, arg):
+        """Show help.  Usage: help [command]"""
+        if arg in self.commands and not hasattr(self, "do_" + arg):
+            print(f"'{arg}' is a system command - see 'man {arg}' "
+                  f"or '{arg} --help'.")
+            return
+        super().do_help(arg)
+        if not arg:
+            self.print_topics("System commands:", sorted(self.commands), 15, 80)
+            print("Prefix any line with '!' to run it through bash, "
+                  "e.g.  !tail -f /var/log/syslog | grep ssh\n")
+
+    # ---------- built-in commands ----------
+
+    def do_bash(self, arg):
+        """Start a regular bash shell. Use 'exit' (or Ctrl+D) to return."""
+        print(color("2", "-> bash; 'exit' returns you to charon-bash"))
+        env = dict(os.environ, CHARON_BASH="1")
+        self._interactive(["/bin/bash", "--login"], env=env)
+        print(color("2", "<- back in charon-bash"))
+
+    def do_shell(self, arg):
+        """Run any command line through bash.  Usage: !<command line>"""
+        if arg.strip():
+            self._shell(arg)
+
+    def do_cd(self, arg):
+        """Change directory.  Usage: cd [dir]   (no dir = home, '-' = previous)"""
+        args = self._split(arg)
+        if args is None:
+            return
+        target = args[0] if args else self.home
+        if target == "-":
+            if not self.oldpwd:
+                print("charon-bash: cd: no previous directory")
+                return
+            target = self.oldpwd
+            print(target)
+        try:
+            prev = os.getcwd()
+            os.chdir(target)
+            self.oldpwd = prev
+        except OSError as e:
+            print(f"charon-bash: cd: {target}: {e.strerror}")
+
+    def complete_cd(self, text, line, begidx, endidx):
+        return [p for p in self._complete_path(text) if p.endswith("/")]
+
+    def do_reload(self, arg):
+        """Reload the list of system commands from the config files."""
+        self.commands = load_commands()
+        print(f"Loaded {len(self.commands)} system commands.")
+
+    def do_version(self, arg):
+        """Show the charon-bash version and install location."""
+        print(f"charon-bash {VERSION} ({SCRIPT_DIR})")
+
+    def do_status(self, arg):
+        """List Docker containers and their state."""
+        self._run(["docker", "ps", "-a", "--format",
+                   "table {{.Names}}\t{{.Status}}\t{{.Image}}"])
+
+    def do_info(self, arg):
+        """Basic server information (uptime, memory, disk)."""
+        self._run(["uptime"])
+        print()
+        self._run(["free", "-h"])
+        print()
+        self._run(["df", "-h", "/"])
+
+    def do_clear(self, arg):
+        """Clear the screen."""
+        os.system("clear")
+
+    def do_exit(self, arg):
+        """Exit charon-bash and log out."""
+        print("Goodbye.")
+        return True
+
+    # ---------- helpers ----------
+
+    def _run(self, argv):
+        """Run a simple (non-interactive) command."""
+        try:
+            subprocess.run(argv, check=False)
+        except FileNotFoundError:
+            print(f"charon-bash: '{argv[0]}' is not available on this server")
+
+    def _interactive(self, argv, env=None):
+        """Run a program attached to the terminal (bash, vi, htop, ...)."""
+        # A handler (not SIG_IGN!) is reset to default in the child on exec,
+        # so Ctrl+C works normally inside the program but doesn't kill charon-bash.
+        old = signal.signal(signal.SIGINT, lambda s, f: None)
+        try:
+            return subprocess.call(argv, env=env)
+        except FileNotFoundError:
+            print(f"charon-bash: '{argv[0]}' is not available on this server")
+            return 127
+        finally:
+            signal.signal(signal.SIGINT, old)
+
+    def _shell(self, line):
+        """Run a command line through bash and report a non-zero exit code."""
+        rc = self._interactive(["/bin/bash", "-c", line])
+        if rc:
+            print(color("2", f"[exit {rc}]"))
+
+    def _split(self, arg):
+        """Split arguments like a shell does (quotes, escapes, ~)."""
+        try:
+            return [os.path.expanduser(a) for a in shlex.split(arg)]
+        except ValueError as e:
+            print(f"charon-bash: {e}")
+            return None
+
+    def _complete_path(self, text):
+        """Tab completion for file and directory paths."""
+        matches = glob.glob(os.path.expanduser(text) + "*")
+        return [m + "/" if os.path.isdir(m) else m for m in sorted(matches)]
+
+
+def setup_readline():
+    # Only whitespace separates words, so paths like /etc/ssh/ complete as a whole
+    readline.set_completer_delims(" \t\n")
+    try:
+        readline.read_history_file(HISTFILE)
+    except (FileNotFoundError, PermissionError):
+        pass
+    readline.set_history_length(HISTSIZE)
+
+    def save():
+        try:
+            readline.write_history_file(HISTFILE)
+        except OSError:
+            pass
+
+    atexit.register(save)
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):
+        print(f"charon-bash {VERSION}")
+        return 0
+    # ForceCommand also applies to "ssh host command", scp and sftp - reject them
+    if os.environ.get("SSH_ORIGINAL_COMMAND"):
+        print("charon-bash: running commands and scp/sftp are not allowed "
+              "on this port.", file=sys.stderr)
+        return 1
+    if not sys.stdin.isatty():
+        print("charon-bash: an interactive terminal is required.", file=sys.stderr)
+        return 1
+
+    setup_readline()
+    shell = CharonShell()
+    while True:
+        try:
+            shell.cmdloop()
+            return 0
+        except KeyboardInterrupt:
+            print("^C")
+            shell.intro = ""  # don't print the intro again when the loop restarts
+
+
+if __name__ == "__main__":
+    sys.exit(main())

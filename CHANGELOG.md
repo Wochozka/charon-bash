@@ -1,0 +1,17 @@
+# Changelog
+
+## v0.4.0
+- System command list moved to `config/commands` (versioned) and
+  `/etc/charon-bash/commands.local` (server-specific, `-cmd` removes a command)
+- New built-ins: `reload`, `version`; `charon-bash --version`
+- Installer and automatic updates from GitHub release tags (systemd timer)
+
+## v0.3
+- System commands run directly via an allowlist, `!` prefix runs anything through bash
+- Built-in `cd`, current directory in the prompt, exit codes shown
+
+## v0.2
+- `vi` command, tab completion of paths
+
+## v0.1
+- Initial version: `bash`, `status`, `info`, `clear`, `exit`

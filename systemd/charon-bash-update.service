@@ -1,0 +1,8 @@
+[Unit]
+Description=Check GitHub for charon-bash updates
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@REPO_DIR@/update.sh

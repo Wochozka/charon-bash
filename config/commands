@@ -1,0 +1,53 @@
+# System commands that can be typed directly in charon-bash.
+# One command per line, '#' starts a comment.
+# They run through bash, so pipes, redirects, globs and $VARS work.
+#
+# NOTE: this is a convenience list, NOT a security boundary
+# ('bash' and '!' give full shell access anyway).
+#
+# Server-specific changes belong in /etc/charon-bash/commands.local
+# (prefix a line with '-' there to remove a command listed here).
+
+# files
+ls
+cat
+less
+head
+tail
+grep
+find
+pwd
+cp
+mv
+mkdir
+touch
+
+# editors
+vi
+vim
+nano
+
+# system
+top
+htop
+ps
+df
+du
+free
+uptime
+systemctl
+journalctl
+
+# network
+ping
+ip
+ss
+curl
+dig
+
+# containers
+docker
+
+# privileges (effectively allows anything as root)
+sudo
+sudoedit
