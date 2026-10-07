@@ -13,7 +13,7 @@ import socket
 import subprocess
 import sys
 
-VERSION = "0.4.5"
+VERSION = "0.4.6"
 HISTFILE = os.path.expanduser("~/.charon_bash_history")
 HISTSIZE = 1000
 
@@ -91,7 +91,6 @@ class CharonShell(cmd.Cmd):
         self.commands = load_commands()
         self._update_prompt()
         self.intro = (
-            "Welcome on ",
             color("1;36", f"charon-bash {VERSION}") + f" on {self.host}\n"
             "Type 'help' for a list of commands, 'bash' for a regular shell, "
             "'exit' to log out.\n"

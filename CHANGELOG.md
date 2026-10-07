@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.6
+- Remove Welcome
+
 ## v0.4.5
 - Hotfix
 
