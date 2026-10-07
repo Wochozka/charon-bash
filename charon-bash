@@ -13,7 +13,7 @@ import socket
 import subprocess
 import sys
 
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 HISTFILE = os.path.expanduser("~/.charon_bash_history")
 HISTSIZE = 1000
 
@@ -297,6 +297,7 @@ def setup_readline():
 
     atexit.register(save)
 
+def broken(:
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):

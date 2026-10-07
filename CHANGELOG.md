@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.2
+- Broken code
+
 ## v0.4.1
 - Add update internal command"
 
