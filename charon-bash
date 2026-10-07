@@ -13,7 +13,7 @@ import socket
 import subprocess
 import sys
 
-VERSION = "0.4.3"
+VERSION = "0.4.4"
 HISTFILE = os.path.expanduser("~/.charon_bash_history")
 HISTSIZE = 1000
 

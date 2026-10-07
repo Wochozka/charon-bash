@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.4
+- Add Welcome
+
 ## v0.4.3
 - Hotfix release
 
