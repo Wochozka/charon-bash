@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.3
+- Hotfix release
+
 ## v0.4.2
 - Broken code
 
