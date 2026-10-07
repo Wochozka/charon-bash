@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.5.0
+- Restart after update
+
 ## v0.4.6
 - Remove Welcome
 

@@ -13,7 +13,7 @@ import socket
 import subprocess
 import sys
 
-VERSION = "0.4.6"
+VERSION = "0.5.0"
 HISTFILE = os.path.expanduser("~/.charon_bash_history")
 HISTSIZE = 1000
 
@@ -201,20 +201,36 @@ class CharonShell(cmd.Cmd):
         print(f"charon-bash {VERSION} ({SCRIPT_DIR})")
 
     def do_update(self, arg):
-        """Check GitHub for a new release right now (needs sudo)."""
+        """Check GitHub for a new release and switch to it (needs sudo)."""
         rc = self._interactive(
             ["sudo", "systemctl", "start", "charon-bash-update.service"])
         self._run(["sudo", "journalctl", "-u", "charon-bash-update.service",
                    "-n", "5", "--no-pager", "-o", "cat"])
         if rc:
             return
-        res = subprocess.run(
-            [sys.executable, os.path.realpath(__file__), "--version"],
-            capture_output=True, text=True)
-        installed = res.stdout.split()[-1] if res.stdout else "?"
-        print(f"Running: {VERSION}, installed: {installed}")
-        if installed != VERSION:
-            print("Log out and back in to use the new version.")
+        installed, _ = self._installed_version()
+        if installed and installed != VERSION:
+            self.do_restart("")
+        else:
+            print(f"Already running the latest installed version ({VERSION}).")
+
+    def do_restart(self, arg):
+        """Restart charon-bash in place, loading the installed version."""
+        installed, error = self._installed_version()
+        if not installed:
+            print(f"charon-bash: the installed version fails to start, "
+                  f"staying on {VERSION}")
+            if error:
+                print(color("2", error))
+            return
+        try:
+            readline.write_history_file(HISTFILE)  # atexit doesn't run on exec
+        except OSError:
+            pass
+        print(color("2", f"Restarting: {VERSION} -> {installed}"))
+        sys.stdout.flush()
+        script = os.path.realpath(__file__)
+        os.execv(sys.executable, [sys.executable, script, "--restarted"])
 
     def do_status(self, arg):
         """List Docker containers and their state."""
@@ -279,6 +295,14 @@ class CharonShell(cmd.Cmd):
         matches = glob.glob(os.path.expanduser(text) + "*")
         return [m + "/" if os.path.isdir(m) else m for m in sorted(matches)]
 
+    def _installed_version(self):
+        """Test-run the installed script; return (version, None) or (None, error)."""
+        res = subprocess.run(
+            [sys.executable, os.path.realpath(__file__), "--version"],
+            capture_output=True, text=True, timeout=10)
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout.split()[-1], None
+        return None, (res.stderr or res.stdout).strip()
 
 def setup_readline():
     # Only whitespace separates words, so paths like /etc/ssh/ complete as a whole
@@ -312,6 +336,8 @@ def main():
 
     setup_readline()
     shell = CharonShell()
+    if "--restarted" in sys.argv[1:]:
+        shell.intro = color("2", f"charon-bash restarted, now running {VERSION}")
     while True:
         try:
             shell.cmdloop()
