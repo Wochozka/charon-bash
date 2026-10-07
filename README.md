@@ -1,6 +1,6 @@
 # charon-bash
 
-A small custom shell for SSH access to the **charon** server. Users connecting
+A small **custom** shell for SSH access to the **charon** server. Users connecting
 on a dedicated SSH port land in `charon-bash` instead of a login shell. From
 there they can run built-in commands, allowed system commands, or drop into a
 regular `bash` (and come back with `exit`).
