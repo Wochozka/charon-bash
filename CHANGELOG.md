@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.1
+- Add update internal command"
+
 ## v0.4.0
 - System command list moved to `config/commands` (versioned) and
   `/etc/charon-bash/commands.local` (server-specific, `-cmd` removes a command)

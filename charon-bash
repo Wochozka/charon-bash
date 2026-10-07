@@ -13,7 +13,7 @@ import socket
 import subprocess
 import sys
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 HISTFILE = os.path.expanduser("~/.charon_bash_history")
 HISTSIZE = 1000
 
@@ -199,6 +199,22 @@ class CharonShell(cmd.Cmd):
     def do_version(self, arg):
         """Show the charon-bash version and install location."""
         print(f"charon-bash {VERSION} ({SCRIPT_DIR})")
+
+    def do_update(self, arg):
+        """Check GitHub for a new release right now (needs sudo)."""
+        rc = self._interactive(
+            ["sudo", "systemctl", "start", "charon-bash-update.service"])
+        self._run(["sudo", "journalctl", "-u", "charon-bash-update.service",
+                   "-n", "5", "--no-pager", "-o", "cat"])
+        if rc:
+            return
+        res = subprocess.run(
+            [sys.executable, os.path.realpath(__file__), "--version"],
+            capture_output=True, text=True)
+        installed = res.stdout.split()[-1] if res.stdout else "?"
+        print(f"Running: {VERSION}, installed: {installed}")
+        if installed != VERSION:
+            print("Log out and back in to use the new version.")
 
     def do_status(self, arg):
         """List Docker containers and their state."""
