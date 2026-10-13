@@ -13,7 +13,7 @@ import socket
 import subprocess
 import sys
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 HISTFILE = os.path.expanduser("~/.charon_bash_history")
 HISTSIZE = 1000
 
@@ -105,7 +105,7 @@ class CharonShell(cmd.Cmd):
         self.prompt = (
             prompt_color("1;36", "charon-bash") + " "
             + prompt_color("33", self.user) + ":"
-            + prompt_color("34", cwd) + "> "
+            + prompt_color("94", cwd) + "> "
         )
 
     def postcmd(self, stop, line):

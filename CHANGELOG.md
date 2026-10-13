@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.5.1
+- Change directory color to ligh blue.
+
 ## v0.5.0
 - Restart after update
 
