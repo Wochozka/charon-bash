@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.5.2
+- Update colors.
+
 ## v0.5.1
 - Change directory color to ligh blue.
 
